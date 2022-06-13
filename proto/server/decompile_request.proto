@@ -1,0 +1,6 @@
+syntax = "proto3";
+
+message DecompileRequest {
+    string filename = 1;
+    bytes binary = 2;
+}
