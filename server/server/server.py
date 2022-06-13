@@ -6,11 +6,15 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Iterable, Optional
 
 from binaryninja import BinaryView, BinaryViewType  # pylint: disable=import-error
-from grpc import server, _server
+from grpc import server
+from grpc._server import _Server
 
-from .decompile_request_pb2 import DecompileRequest
-from .decompile_result_pb2 import DecompileResult
-from .decompiler_pb2_grpc import add_DecompilerServicer_to_server, DecompilerServicer
+from server.proto.decompile_request_pb2 import DecompileRequest
+from server.proto.decompile_result_pb2 import DecompileResult
+from server.proto.decompiler_pb2_grpc import (
+    add_DecompilerServicer_to_server,
+    DecompilerServicer,
+)
 
 
 class DecompilerServer(DecompilerServicer):
@@ -25,7 +29,7 @@ class DecompilerServer(DecompilerServicer):
         self.host = host
         self.port = port
         self.binaries: Dict[str, BinaryView] = {}
-        self.server: Optional[_server] = None
+        self.server: Optional[_Server] = None
 
     def Decompile(
         self, request: DecompileRequest, context
@@ -38,6 +42,7 @@ class DecompilerServer(DecompilerServicer):
 
         binary = self.binaries[request.filename]
         for function in binary.functions:
+            print("Decompiling function:", function.name)
             lines = " ".join(map(str, function.hlil.lines))
             yield DecompileResult(function.name, lines)
 

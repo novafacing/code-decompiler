@@ -34,7 +34,7 @@
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
-		"compile": "tsc -p ./ && python3 -m grpc_tools.protoc --grpc_python_out=server/ --python_out=server/ -Iproto proto/server/proto/*.proto && protoc --proto_path=proto --js_out=library=src/proto/proto,binary:. proto/server/proto/*.proto",
+		"compile": "tsc -p ./ && python3 -m grpc_tools.protoc --grpc_python_out=server/ --python_out=server/ -Iproto proto/server/proto/*.proto && protoc --plugin=node_modules/.bin/protoc-gen-ts --ts_out=./src/proto/ -Iproto proto/server/proto/*.proto",
 		"watch": "tsc -watch -p ./",
 		"pretest": "npm run compile && npm run lint",
 		"lint": "eslint src --ext ts",
@@ -50,10 +50,13 @@
 		"@vscode/test-electron": "^2.1.3",
 		"eslint": "^8.16.0",
 		"glob": "^8.0.3",
+		"grpc_tools_node_protoc_ts": "^5.3.2",
 		"mocha": "^10.0.0",
 		"typescript": "^4.7.2"
 	},
 	"dependencies": {
-		"google-protobuf": "^3.20.1"
+		"google-protobuf": "^3.20.1",
+		"grpc": "^1.24.11",
+		"grpc-tools": "^1.11.2"
 	}
 }
