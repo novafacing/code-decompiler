@@ -34,7 +34,7 @@
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
-		"compile": "tsc -p ./ && python3 -m grpc_tools.protoc --grpc_python_out=server/server/proto --python_out=server/server/proto --proto_path=proto proto/decompiler.proto proto/server/decompile_request.proto proto/server/decompile_result.proto && protoc --proto_path=proto --js_out=library=src/proto/proto,binary:. proto/decompiler.proto proto/server/decompile_request.proto proto/server/decompile_result.proto",
+		"compile": "tsc -p ./ && python3 -m grpc_tools.protoc --grpc_python_out=server/ --python_out=server/ -Iproto proto/server/proto/*.proto && protoc --proto_path=proto --js_out=library=src/proto/proto,binary:. proto/server/proto/*.proto",
 		"watch": "tsc -watch -p ./",
 		"pretest": "npm run compile && npm run lint",
 		"lint": "eslint src --ext ts",

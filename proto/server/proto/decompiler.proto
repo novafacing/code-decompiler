@@ -1,7 +1,7 @@
 syntax = "proto3";
 
-import "server/decompile_result.proto";
-import "server/decompile_request.proto";
+import "server/proto/decompile_result.proto";
+import "server/proto/decompile_request.proto";
 
 service Decompiler {
     rpc Decompile(DecompileRequest) returns (stream DecompileResult) {}

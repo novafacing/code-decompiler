@@ -4,7 +4,7 @@ Server CLI entrypoint
 
 from argparse import ArgumentParser
 
-from server import DecompilerServer
+from server.server import DecompilerServer
 
 
 parser = ArgumentParser(prog="server")
