@@ -43,6 +43,7 @@ export type Entry = File | Directory;
 
 export class decfs implements vscode.FileSystemProvider {
     root = new Directory("");
+    targets: { [key: string]: vscode.Uri } = {};
 
     addDecompTarget(file: vscode.Uri): void {
         const filename = path.posix.basename(file.path);
@@ -64,6 +65,9 @@ export class decfs implements vscode.FileSystemProvider {
             throw e;
         }
         console.log("Created: ", decompDir);
+
+        this.targets[filename] = filePath;
+
         this.writeFile(filePath, contents, {
             create: true,
             overwrite: true,
@@ -71,6 +75,10 @@ export class decfs implements vscode.FileSystemProvider {
         const fileStat = this.stat(filePath);
         console.log("File written...");
         console.log("File stats: ", fileStat);
+    }
+
+    getDecompTarget(name: string): vscode.Uri {
+        return this.targets[name];
     }
 
     stat(uri: vscode.Uri): vscode.FileStat {

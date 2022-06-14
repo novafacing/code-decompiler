@@ -1,11 +1,17 @@
 import * as vscode from "vscode";
 
-import { DecompilerClient } from "./decompiler";
+import { CodeDecompilerClient } from "./decompiler";
+
+export var vscodeContext: vscode.ExtensionContext;
+export var mainClient: CodeDecompilerClient;
 
 export function activate(context: vscode.ExtensionContext) {
     console.log("Registering decompile command...");
 
-    const client = DecompilerClient.getClient(context);
+    vscodeContext = context;
+
+    const client = CodeDecompilerClient.getClient(context);
+    mainClient = client;
 
     const fs = client.fileSystem ?? null;
 
@@ -24,7 +30,7 @@ export function activate(context: vscode.ExtensionContext) {
             if (file) {
                 console.log("Decompiling file: ", file);
             }
-            let decompilerClient = DecompilerClient.getClient(context, file);
+            let decompilerClient = CodeDecompilerClient.getClient(context, file);
         },
     );
 
