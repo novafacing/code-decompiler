@@ -42,11 +42,22 @@ class DecompilerServer(DecompilerServicer):
         """
         Decompile method
         """
-        logger.info(f"Request for decompilation received for {request}")
+        logger.info(f"Request for decompilation received for {request.filename}")
+
         if request.filename not in self.binaries:
-            self.binaries[request.filename] = BinaryViewType.load(request.filename)
+            logger.info(
+                f"{filename} not found in cache. Loading it from {request.binary[:64]}..."
+            )
+
+            self.binaries[request.filename] = BinaryViewType.load(request.binary)
 
         binary = self.binaries[request.filename]
+
+        if binary is None:
+            raise Exception(
+                f"{request.filename} not found, or binary {request.binary[:64]}... is invalid"
+            )
+
         for function in binary.functions:
             logger.info(f"Decompiling function: {function.name}")
             lines = " ".join(map(str, function.hlil.lines))

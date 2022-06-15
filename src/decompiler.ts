@@ -43,27 +43,31 @@ export class CodeDecompilerClient {
             binary: this.fileSystem?.readFile(filePath) ?? new TextEncoder().encode(""),
         });
 
-        const decompileResponse = this.client.Decompile(request);
-
         let decompilation: { [key: string]: string } = {};
 
-        decompileResponse
-            .on("data", (res: DecompileResult) => {
-                console.log("Got decompile response: ", res.decompilation);
-                decompilation[res.function] = res.decompilation;
-                this.fileSystem?.writeFile(
-                    filePath.with({ path: dirname(filePath.fsPath) }),
-                    new TextEncoder().encode(res.decompilation),
-                    { create: true, overwrite: true },
-                );
-            })
-            .on("end", () => {
-                console.log("Finished decompiling.");
-            })
-            .on("error", (err: Error) => {
-                console.log("Error decompiling: ", err);
-                throw err;
-            });
+        const decompileResponse = this.client.Decompile(request);
+
+        decompileResponse.on("status", (status) => {
+            console.log("Got decompile status: ", status);
+        });
+
+        decompileResponse.on("data", (res: DecompileResult) => {
+            console.log("Got decompile response: ", res.decompilation);
+            decompilation[res.function] = res.decompilation;
+            this.fileSystem?.writeFile(
+                filePath.with({ path: dirname(filePath.fsPath) }),
+                new TextEncoder().encode(res.decompilation),
+                { create: true, overwrite: true },
+            );
+        });
+        decompileResponse.on("end", () => {
+            console.log("Finished decompiling.");
+        });
+
+        decompileResponse.on("error", (err: Error) => {
+            console.log("Error decompiling: ", err);
+            throw err;
+        });
 
         return decompilation;
     }
