@@ -67,6 +67,10 @@ export class CodeDecompilerClient {
         this.waitUntilPong();
     }
 
+    stop() {
+        this.server.stop();
+    }
+
     decompile(file: vscode.Uri): { [key: string]: string } {
         const fileName = basename(file.fsPath);
         const filePath = this.fileSystem?.getDecompTarget(fileName);

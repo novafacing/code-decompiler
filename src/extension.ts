@@ -30,11 +30,14 @@ export function activate(context: vscode.ExtensionContext) {
             if (file) {
                 console.log("Decompiling file: ", file);
             }
-            let decompilerClient = CodeDecompilerClient.getClient(context, file);
+            mainClient = CodeDecompilerClient.getClient(context, file);
+            mainClient = CodeDecompilerClient.getClient(context, file);
         },
     );
 
     context.subscriptions.push(decompileCommand);
 }
 
-export function deactivate() {}
+export function deactivate() {
+    mainClient.stop();
+}

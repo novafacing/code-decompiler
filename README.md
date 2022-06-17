@@ -1,5 +1,7 @@
 # code-decompiler README
 
+![demovideo](rsrc/decompiler.mp4)
+
 This is SUPER WIP!!! Don't use it yet!
 
 All that is working so far is:

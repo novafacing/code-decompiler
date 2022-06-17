@@ -73,9 +73,12 @@ class DecompilerServer(DecompilerServicer):
 
         for function in binary.functions:
             logger.info(f"Decompiling function: {function.name}")
-            lines = "\n".join(
+
+            lines = str(function.function_type) + " {\n"
+            lines += "\n".join(
                 chain(*map(lambda i: map(str, i.lines), function.hlil.instructions))
             )
+            lines += "\n}"
             yield DecompileResult(function=function.name, decompilation=lines)
 
     def run(self) -> None:
