@@ -46,14 +46,15 @@ class DecompilerServer(DecompilerServicer):
 
         if request.filename not in self.binaries:
             logger.info(
-                f"{filename} not found in cache. Loading it from {request.binary[:64]}..."
+                f"{request.filename} not found in cache. Loading it from {request.binary[:64]}..."
             )
 
             self.binaries[request.filename] = BinaryViewType.load(request.binary)
+            logger.info(f"{request.filename} loaded: {self.binaries[request.filename]}")
 
         binary = self.binaries[request.filename]
 
-        if binary is None:
+        if binary is None or not hasattr(binary, "functions"):
             raise Exception(
                 f"{request.filename} not found, or binary {request.binary[:64]}... is invalid"
             )

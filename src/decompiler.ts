@@ -8,22 +8,27 @@ import { TextEncoder } from "util";
 import { DecompileRequest } from "./proto/server/proto/decompile_request";
 import { DecompilerClient } from "./proto/server/proto/decompiler";
 import { DecompileResult } from "./proto/server/proto/decompile_result";
+import { SubprocessOptions, SubprocessSpawnOptions, VSCodeSubprocess } from "./process";
 
 export class CodeDecompilerClient {
     private static client: CodeDecompilerClient | undefined;
     public fileSystem: decfs | undefined;
-    private server: ChildProcess;
+    private server: VSCodeSubprocess;
     private client: DecompilerClient;
 
     constructor(private readonly context: vscode.ExtensionContext) {
         this.fileSystem = new decfs();
         console.log("Started server...");
-        this.server = spawn("poetry", ["run", "python3", "-m", "server"], {
+        const spawnOptions: SubprocessSpawnOptions = {
             cwd: vscode.Uri.joinPath(context.extensionUri, "server").fsPath,
             detached: true,
-        }).on("error", (err) => {
-            throw err;
-        });
+        };
+        const options: SubprocessOptions = {
+            command: "poetry",
+            args: ["run", "python3", "-m", "server"],
+        };
+        this.server = new VSCodeSubprocess(options);
+        this.server.start();
         console.log("Starting client...");
         this.client = new DecompilerClient(
             "127.0.0.1:8080",
