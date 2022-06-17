@@ -3,18 +3,42 @@ import * as grpc from "@grpc/grpc-js";
 import { spawn, ChildProcess } from "child_process";
 import { decfs } from "./decompfs";
 import { basename } from "path";
-import { dirname } from "path/posix";
+import { dirname, join } from "path/posix";
 import { TextEncoder } from "util";
 import { DecompileRequest } from "./proto/server/proto/decompile_request";
-import { DecompilerClient } from "./proto/server/proto/decompiler";
+import { DecompilerClient, PingMessage } from "./proto/server/proto/decompiler";
 import { DecompileResult } from "./proto/server/proto/decompile_result";
 import { SubprocessOptions, SubprocessSpawnOptions, VSCodeSubprocess } from "./process";
+import { clear } from "console";
 
 export class CodeDecompilerClient {
     private static client: CodeDecompilerClient | undefined;
     public fileSystem: decfs | undefined;
     private server: VSCodeSubprocess;
     private client: DecompilerClient;
+
+    private waitUntilPong() {
+        var tries = 0;
+        const ping: PingMessage = new PingMessage({
+            sequence: 1337,
+        });
+        var interval = setInterval(() => {
+            try {
+                const pong = this.client.Ping(ping, (err, message) => {
+                    if (message !== undefined) {
+                        console.log("Got pong: ", message.sequence);
+                        clearInterval(interval);
+                    }
+                });
+            } catch (e) {
+                console.log(e);
+            }
+            tries++;
+            if (tries++ > 10) {
+                throw Error("Could not get pong in 10 tries!");
+            }
+        }, 1000);
+    }
 
     constructor(private readonly context: vscode.ExtensionContext) {
         this.fileSystem = new decfs();
@@ -26,14 +50,21 @@ export class CodeDecompilerClient {
         const options: SubprocessOptions = {
             command: "poetry",
             args: ["run", "python3", "-m", "server"],
+            options: spawnOptions,
         };
         this.server = new VSCodeSubprocess(options);
         this.server.start();
         console.log("Starting client...");
         this.client = new DecompilerClient(
-            "127.0.0.1:8080",
+            "localhost:8080",
             grpc.credentials.createInsecure(),
         );
+        grpc.waitForClientReady(this.client, Date.now() + 5000, (err) => {
+            if (err !== undefined) {
+                console.log(err);
+            }
+        });
+        this.waitUntilPong();
     }
 
     decompile(file: vscode.Uri): { [key: string]: string } {
@@ -58,9 +89,14 @@ export class CodeDecompilerClient {
 
         decompileResponse.on("data", (res: DecompileResult) => {
             console.log("Got decompile response: ", res.decompilation);
+            const functionOutputPath = join(
+                dirname(filePath.fsPath),
+                res.function + ".c",
+            );
+            console.log("Writing decompile result to: ", functionOutputPath);
             decompilation[res.function] = res.decompilation;
             this.fileSystem?.writeFile(
-                filePath.with({ path: dirname(filePath.fsPath) }),
+                filePath.with({ path: functionOutputPath }),
                 new TextEncoder().encode(res.decompilation),
                 { create: true, overwrite: true },
             );

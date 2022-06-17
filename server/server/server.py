@@ -3,6 +3,7 @@ Main gRPC server implementation
 """
 
 from concurrent.futures import ThreadPoolExecutor
+from itertools import chain
 from typing import Dict, Iterable, Optional
 from logging import DEBUG, basicConfig, getLogger
 
@@ -15,6 +16,10 @@ from server.proto.decompile_result_pb2 import DecompileResult
 from server.proto.decompiler_pb2_grpc import (
     add_DecompilerServicer_to_server,
     DecompilerServicer,
+)
+from server.proto.decompiler_pb2 import (
+    PingMessage,
+    PongMessage,
 )
 
 basicConfig(filename="server.log", encoding="utf-8", level=DEBUG)
@@ -35,6 +40,13 @@ class DecompilerServer(DecompilerServicer):
         logger.info(f"Running server on {self.host}:{self.port}")
         self.binaries: Dict[str, BinaryView] = {}
         self.server: Optional[_Server] = None
+
+    def Ping(self, request: PingMessage, context) -> PongMessage:
+        """
+        Ping method
+        """
+        logger.info(f"Ping received: {request.sequence}")
+        return PingMessage(sequence=request.sequence)
 
     def Decompile(
         self, request: DecompileRequest, context
@@ -61,8 +73,10 @@ class DecompilerServer(DecompilerServicer):
 
         for function in binary.functions:
             logger.info(f"Decompiling function: {function.name}")
-            lines = " ".join(map(str, function.hlil.lines))
-            yield DecompileResult(function.name, lines)
+            lines = "\n".join(
+                chain(*map(lambda i: map(str, i.lines), function.hlil.instructions))
+            )
+            yield DecompileResult(function=function.name, decompilation=lines)
 
     def run(self) -> None:
         """
