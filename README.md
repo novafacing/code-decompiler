@@ -1,6 +1,6 @@
 # code-decompiler README
 
-![demovideo](rsrc/decompiler.mp4)
+![demovideo](rsrc/output.gif)
 
 This is SUPER WIP!!! Don't use it yet!
 
