@@ -8,6 +8,8 @@ from typing import Dict, Iterable, Optional
 from logging import DEBUG, basicConfig, getLogger
 
 from binaryninja import BinaryView, BinaryViewType  # pylint: disable=import-error
+from binaryninja.function import DisassemblySettings, DisassemblyOption
+from binaryninja.lineardisassembly import LinearViewObject, LinearViewCursor
 from grpc import server
 from grpc._server import _Server
 
@@ -72,13 +74,18 @@ class DecompilerServer(DecompilerServicer):
             )
 
         for function in binary.functions:
-            logger.info(f"Decompiling function: {function.name}")
+            # https://gist.github.com/psifertex/6fbc7532f536775194edd26290892ef7#file-pseudo_c-py
+            settings = DisassemblySettings()
+            settings.set_option(DisassemblyOption.ShowAddress, False)
+            lvo = LinearViewObject.language_representation(binary, settings)
+            cursor_end = LinearViewCursor(lvo)
+            cursor_end.seek_to_address(function.highest_address)
+            body = binary.get_next_linear_disassembly_lines(cursor_end)
+            cursor_end.seek_to_address(function.highest_address)
+            header = binary.get_previous_linear_disassembly_lines(cursor_end)
 
-            lines = str(function.function_type) + " {\n"
-            lines += "\n".join(
-                chain(*map(lambda i: map(str, i.lines), function.hlil.instructions))
-            )
-            lines += "\n}"
+            logger.info(f"Decompiling function: {function.name}")
+            lines = "\n".join(map(str, chain(header, body))) + "\n"
             yield DecompileResult(function=function.name, decompilation=lines)
 
     def run(self) -> None:
