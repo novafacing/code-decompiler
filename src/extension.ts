@@ -13,24 +13,12 @@ export function activate(context: vscode.ExtensionContext) {
     const client = CodeDecompilerClient.getClient(context);
     mainClient = client;
 
-    const fs = client.fileSystem ?? null;
-
-    if (fs === null) {
-        throw Error("Couldn't get FS!");
-    }
-
-    context.subscriptions.push(
-        vscode.workspace.registerFileSystemProvider("decfs", fs, {
-            isCaseSensitive: true,
-        }),
-    );
     let decompileCommand = vscode.commands.registerCommand(
         "code-decompiler.decompile",
         async (file: vscode.Uri) => {
             if (file) {
                 console.log("Decompiling file: ", file);
             }
-            mainClient = CodeDecompilerClient.getClient(context, file);
             mainClient = CodeDecompilerClient.getClient(context, file);
         },
     );

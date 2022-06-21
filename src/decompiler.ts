@@ -1,19 +1,20 @@
 import * as vscode from "vscode";
 import * as grpc from "@grpc/grpc-js";
-import { spawn, ChildProcess } from "child_process";
-import { decfs } from "./decompfs";
 import { basename } from "path";
 import { dirname, join } from "path/posix";
 import { TextEncoder } from "util";
-import { DecompileRequest } from "./proto/server/proto/decompile_request";
+import {
+    DecompilerBackend,
+    DecompileRequest,
+} from "./proto/server/proto/decompile_request";
 import { DecompilerClient, PingMessage } from "./proto/server/proto/decompiler";
 import { DecompileResult } from "./proto/server/proto/decompile_result";
 import { SubprocessOptions, SubprocessSpawnOptions, VSCodeSubprocess } from "./process";
-import { clear } from "console";
+import { mkdir, readFileSync, writeFileSync } from "fs";
+import { mapUriDefaultScheme } from "@grpc/grpc-js/build/src/resolver";
 
 export class CodeDecompilerClient {
     private static client: CodeDecompilerClient | undefined;
-    public fileSystem: decfs | undefined;
     private server: VSCodeSubprocess;
     private client: DecompilerClient;
 
@@ -41,7 +42,6 @@ export class CodeDecompilerClient {
     }
 
     constructor(private readonly context: vscode.ExtensionContext) {
-        this.fileSystem = new decfs();
         console.log("Started server...");
         const spawnOptions: SubprocessSpawnOptions = {
             cwd: vscode.Uri.joinPath(context.extensionUri, "server").fsPath,
@@ -71,50 +71,76 @@ export class CodeDecompilerClient {
         this.server.stop();
     }
 
-    decompile(file: vscode.Uri): { [key: string]: string } {
+    decompile(file: vscode.Uri): void {
         const fileName = basename(file.fsPath);
-        const filePath = this.fileSystem?.getDecompTarget(fileName);
+        const filePath = file;
+        const fileContents = readFileSync(filePath.fsPath);
+        const decompileDir = join(dirname(filePath.fsPath), fileName + ".decompiled");
+        const typesFilePath = join(decompileDir, "types.h");
+
+        mkdir(decompileDir, (err) => {
+            if (err === null) {
+                console.log("Error:", err);
+            }
+        });
+
         if (filePath === undefined) {
             throw new Error("Unable to decompile: " + file);
         }
 
         let request: DecompileRequest = new DecompileRequest({
             filename: fileName,
-            binary: this.fileSystem?.readFile(filePath) ?? new TextEncoder().encode(""),
+            decompiler: DecompilerBackend.binaryninja,
+            binary: fileContents,
         });
 
-        let decompilation: { [key: string]: string } = {};
-
         const decompileResponse = this.client.Decompile(request);
+        let types = {
+            includes:
+                "#include <stdarg.h>\n" +
+                "#include <stdbool.h>\n" +
+                "#include <stddef.h>\n" +
+                "#include <stdint.h>\n" +
+                "#include <stdio.h>\n" +
+                "#include <stdlib.h>\n",
+        };
 
         decompileResponse.on("status", (status) => {
             console.log("Got decompile status: ", status);
         });
 
         decompileResponse.on("data", (res: DecompileResult) => {
-            console.log("Got decompile response: ", res.decompilation);
+            console.log("Got result: ", res);
             const functionOutputPath = join(
                 dirname(filePath.fsPath),
+                basename(filePath.fsPath) + ".decompiled",
                 res.function + ".c",
             );
-            console.log("Writing decompile result to: ", functionOutputPath);
-            decompilation[res.function] = res.decompilation;
-            this.fileSystem?.writeFile(
-                filePath.with({ path: functionOutputPath }),
-                new TextEncoder().encode(res.decompilation),
-                { create: true, overwrite: true },
+
+            writeFileSync(
+                filePath.with({ path: functionOutputPath }).fsPath,
+                new TextEncoder().encode(`#include "types.h"\n` + res.decompilation),
             );
+
+            types = Object.assign({}, types, res.types);
         });
+
         decompileResponse.on("end", () => {
-            console.log("Finished decompiling.");
+            console.log("Finished decompiling. Have types: ", types);
+            writeFileSync(
+                typesFilePath,
+                Object.values(types)
+                    // .map((v, i, a) => {
+                    //     return new TextEncoder().encode(v);
+                    // })
+                    .join("\n"),
+            );
         });
 
         decompileResponse.on("error", (err: Error) => {
-            console.log("Error decompiling: ", err);
+            console.log("Error decompiling: ", err.message);
             throw err;
         });
-
-        return decompilation;
     }
 
     static getClient(
@@ -124,16 +150,11 @@ export class CodeDecompilerClient {
         console.log("Getting decompiler client...");
         if (CodeDecompilerClient.client === undefined) {
             CodeDecompilerClient.client = new CodeDecompilerClient(context);
-            vscode.workspace.updateWorkspaceFolders(0, 0, {
-                uri: vscode.Uri.parse("decfs:/"),
-                name: "Decompile Results",
-            });
         }
 
         const client = CodeDecompilerClient.client;
 
         if (file !== undefined) {
-            client.fileSystem?.addDecompTarget(file);
             client.decompile(file);
         }
 

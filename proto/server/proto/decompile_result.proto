@@ -1,6 +1,8 @@
 syntax = "proto3";
 
 message DecompileResult {
-    string function = 1;
-    string decompilation = 2;
+    string filename = 1;
+    string function = 2;
+    string decompilation = 3;
+    map<string, string> types = 4;
 }

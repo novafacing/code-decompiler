@@ -1,6 +1,13 @@
 syntax = "proto3";
 
+enum DecompilerBackend {
+    binaryninja = 0;
+    angr = 1;
+    ghidra = 2;
+}
+
 message DecompileRequest {
     string filename = 1;
-    bytes binary = 2;
+    DecompilerBackend decompiler = 2;
+    bytes binary = 3;
 }

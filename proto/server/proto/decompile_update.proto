@@ -1,0 +1,5 @@
+syntax = "proto3";
+
+message DecompileUpdate {
+    string filename = 1;
+}

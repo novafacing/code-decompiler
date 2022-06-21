@@ -2,19 +2,24 @@
 Main gRPC server implementation
 """
 
+from abc import abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from itertools import chain
 from typing import Dict, Iterable, Optional
 from logging import DEBUG, basicConfig, getLogger
 
+from tree_sitter import Language, Parser, Node, Tree, TreeCursor
+
 from binaryninja import BinaryView, BinaryViewType  # pylint: disable=import-error
 from binaryninja.function import DisassemblySettings, DisassemblyOption
 from binaryninja.lineardisassembly import LinearViewObject, LinearViewCursor
+
 from grpc import server
 from grpc._server import _Server
 
-from server.proto.decompile_request_pb2 import DecompileRequest
+from server.proto.decompile_request_pb2 import DecompileRequest, DecompilerBackend
 from server.proto.decompile_result_pb2 import DecompileResult
+from server.proto.decompile_update_pb2 import DecompileUpdate
 from server.proto.decompiler_pb2_grpc import (
     add_DecompilerServicer_to_server,
     DecompilerServicer,
@@ -26,6 +31,102 @@ from server.proto.decompiler_pb2 import (
 
 basicConfig(filename="server.log", encoding="utf-8", level=DEBUG)
 logger = getLogger(__name__)
+
+
+class Decompilation:
+    """
+    Abstract base class for decompilation backends
+    """
+
+    def __init__(self, decompile_request: DecompileRequest) -> None:
+        """
+        Base initializer for decompilation backends
+        """
+        self.request = decompile_request
+        self.filename = decompile_request.filename
+        self.binary = decompile_request.binary
+
+    @abstractmethod
+    def result(self) -> Iterable[DecompileResult]:
+        """
+        Abstract method for getting the result of the decompilation
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def update(self, update: DecompileUpdate) -> None:
+        """
+        Abstract method to update the decompilation with the state of the source
+        files
+        """
+        raise NotImplementedError
+
+
+class BinaryNinjaDecompilation(Decompilation):
+    """
+    Represents the decompilation of a binary file
+    """
+
+    functions: Dict[str, str] = {}
+    asts: Dict[str, Tree] = {}
+    types: Dict[str, str] = {}
+    bv: BinaryView
+
+    def __init__(self, decompile_request: DecompileRequest) -> None:
+        """
+        Constructor
+        """
+        super().__init__(decompile_request)
+        self.bv = BinaryViewType.load(self.binary)
+        self._get_functions()
+        self._get_types()
+
+    def _get_functions(self) -> None:
+        """
+        Get each function's decompilation from Binary Ninja
+        """
+        for function in self.bv.functions:
+            # https://gist.github.com/psifertex/6fbc7532f536775194edd26290892ef7#file-pseudo_c-py
+            settings = DisassemblySettings()
+            settings.set_option(DisassemblyOption.ShowAddress, False)
+            lvo = LinearViewObject.language_representation(self.bv, settings)
+            cursor_end = LinearViewCursor(lvo)
+            cursor_end.seek_to_address(function.highest_address)
+            body = self.bv.get_next_linear_disassembly_lines(cursor_end)
+            cursor_end.seek_to_address(function.highest_address)
+            header = self.bv.get_previous_linear_disassembly_lines(cursor_end)
+
+            logger.info(f"Decompiling function: {function.name}")
+            lines = "\n".join(map(str, chain(header, body))) + "\n"
+            self.functions[function.name] = lines
+
+    def _get_types(self) -> None:
+        """
+        Get all the program's types from Binary Ninja
+        """
+        for name, typ in self.bv.types.items():
+            try:
+                self.types[name] = "\n".join(map(str, typ.get_lines(self.bv, name)))
+            except Exception as e:
+                logger.error(f"Failed to get type {name}: {e}")
+
+    def result(self) -> Iterable[DecompileResult]:
+        """
+        Get the decompiler results
+        """
+        for name, function in self.functions.items():
+            yield DecompileResult(
+                filename=self.filename,
+                function=name,
+                decompilation=function,
+                types=self.types,
+            )
+
+    def update(self, update: DecompileUpdate) -> None:
+        """
+        Update the decompilation with the state of the source files
+        """
+        raise NotImplementedError
 
 
 class DecompilerServer(DecompilerServicer):
@@ -63,30 +164,29 @@ class DecompilerServer(DecompilerServicer):
                 f"{request.filename} not found in cache. Loading it from {request.binary[:64]}..."
             )
 
-            self.binaries[request.filename] = BinaryViewType.load(request.binary)
+            if (
+                not request.decompiler
+                or request.decompiler == DecompilerBackend.binaryninja
+            ):
+                self.binaries[request.filename] = BinaryNinjaDecompilation(request)
+
             logger.info(f"{request.filename} loaded: {self.binaries[request.filename]}")
 
-        binary = self.binaries[request.filename]
+        decompile = self.binaries[request.filename]
 
-        if binary is None or not hasattr(binary, "functions"):
+        if decompile is None:
             raise Exception(
                 f"{request.filename} not found, or binary {request.binary[:64]}... is invalid"
             )
 
-        for function in binary.functions:
-            # https://gist.github.com/psifertex/6fbc7532f536775194edd26290892ef7#file-pseudo_c-py
-            settings = DisassemblySettings()
-            settings.set_option(DisassemblyOption.ShowAddress, False)
-            lvo = LinearViewObject.language_representation(binary, settings)
-            cursor_end = LinearViewCursor(lvo)
-            cursor_end.seek_to_address(function.highest_address)
-            body = binary.get_next_linear_disassembly_lines(cursor_end)
-            cursor_end.seek_to_address(function.highest_address)
-            header = binary.get_previous_linear_disassembly_lines(cursor_end)
+        for result in decompile.result():
+            yield result
 
-            logger.info(f"Decompiling function: {function.name}")
-            lines = "\n".join(map(str, chain(header, body))) + "\n"
-            yield DecompileResult(function=function.name, decompilation=lines)
+    def Update(self, request: DecompileUpdate, context) -> None:
+        """
+        Update method
+        """
+        logger.info(f"Update received for {request.filename}")
 
     def run(self) -> None:
         """

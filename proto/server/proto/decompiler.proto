@@ -2,6 +2,7 @@ syntax = "proto3";
 
 import "server/proto/decompile_result.proto";
 import "server/proto/decompile_request.proto";
+import "server/proto/decompile_update.proto";
 
 message PingMessage {
     int32 sequence = 1;
@@ -13,5 +14,6 @@ message PongMessage {
 
 service Decompiler {
     rpc Decompile(DecompileRequest) returns (stream DecompileResult) {}
+    rpc Update(DecompileUpdate) returns (DecompileResult);
     rpc Ping(PingMessage) returns (PongMessage);
 }
